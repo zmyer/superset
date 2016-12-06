@@ -68,7 +68,7 @@ export default class Filter extends React.Component {
             <input
               type="text"
               onChange={this.changeValue.bind(this, this.props.filter)}
-              value={this.props.filter.value}
+              value={this.props.filter.value || ''}
               className="form-control input-sm"
               placeholder="Filter value"
             />

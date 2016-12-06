@@ -94,8 +94,8 @@ export function changeFilter(filter, field, value) {
 }
 
 export const SET_FIELD_VALUE = 'SET_FIELD_VALUE';
-export function setFieldValue(datasource_type, key, value, label) {
-  return { type: SET_FIELD_VALUE, datasource_type, key, value, label };
+export function setFieldValue(datasource_type, key, value) {
+  return { type: SET_FIELD_VALUE, datasource_type, key, value };
 }
 
 export const CHART_UPDATE_STARTED = 'CHART_UPDATE_STARTED';

@@ -1,18 +1,18 @@
 import React, { PropTypes } from 'react';
-import ControlLabelWithTooltip from './ControlLabelWithTooltip';
-import { slugify } from '../../modules/utils';
+import { slugify } from '../../../modules/utils';
 import Select, { Creatable } from 'react-select';
 
 
 const propTypes = {
   name: PropTypes.string.isRequired,
   choices: PropTypes.array,
-  value: PropTypes.oneOfType([PropTypes.string, PropTypes.number, PropTypes.array]).isRequired,
+  value: PropTypes.oneOfType([PropTypes.string, PropTypes.number, PropTypes.array]),
   label: PropTypes.string,
   description: PropTypes.string,
   onChange: PropTypes.func,
   multi: PropTypes.bool,
   freeForm: PropTypes.bool,
+  clearable: PropTypes.bool,
 };
 
 const defaultProps = {
@@ -22,6 +22,7 @@ const defaultProps = {
   label: null,
   description: null,
   onChange: () => {},
+  clearable: true,
 };
 
 export default class SelectField extends React.Component {
@@ -50,10 +51,13 @@ export default class SelectField extends React.Component {
     return opt.label;
   }
   render() {
-    const options = this.props.choices.map((c) => ({ value: c[0], label: c[1] }));
+    const choices = this.props.choices.map || [];
+    console.log(this.props.name);
+    console.log(choices);
+    const options = choices.map((c) => ({ value: c[0], label: c[1] }));
     if (this.props.freeForm) {
       // For FreeFormSelect, insert value into options if not exist
-      const values = this.props.choices.map((c) => c[0]);
+      const values = choices.map((c) => c[0]);
       if (values.indexOf(this.props.value) === -1) {
         options.push({ value: this.props.value, label: this.props.value });
       }
@@ -62,10 +66,11 @@ export default class SelectField extends React.Component {
     const selectProps = {
       multi: this.props.multi,
       name: `select-${this.props.name}`,
-      placeholder: `Select (${this.props.choices.length})`,
+      placeholder: `Select (${choices.length})`,
       options,
       value: this.props.value,
       autosize: false,
+      clearable: this.props.clearable,
       onChange: this.onChange.bind(this),
       optionRenderer: this.renderOption.bind(this),
     };
@@ -75,10 +80,6 @@ export default class SelectField extends React.Component {
 
     return (
       <div id={`formControlsSelect-${slugify(this.props.label)}`}>
-        <ControlLabelWithTooltip
-          label={this.props.label}
-          description={this.props.description}
-        />
         {selectWrap}
       </div>
     );

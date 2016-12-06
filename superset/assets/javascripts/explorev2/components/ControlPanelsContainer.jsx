@@ -7,7 +7,8 @@ import { Panel, Alert } from 'react-bootstrap';
 import visTypes, { sectionsToRender, commonControlPanelSections } from '../stores/visTypes';
 import ControlPanelSection from './ControlPanelSection';
 import FieldSetRow from './FieldSetRow';
-import Filters from './Filters';
+import Filters from './controls/Filters';
+import FieldContainer from './FieldContainer';
 
 const propTypes = {
   datasource_type: PropTypes.string.isRequired,
@@ -15,6 +16,7 @@ const propTypes = {
   fields: PropTypes.object.isRequired,
   isDatasourceMetaLoading: PropTypes.bool.isRequired,
   form_data: PropTypes.object.isRequired,
+  exploreState: PropTypes.object.isRequired,
   y_axis_zero: PropTypes.any,
   alert: PropTypes.string,
 };
@@ -37,12 +39,8 @@ class ControlPanelsContainer extends React.Component {
     }
   }
 
-  onChange(name, value, label) {
-    this.props.actions.setFieldValue(this.props.datasource_type, name, value, label);
-  }
-
-  sectionsToRender() {
-    return sectionsToRender(this.props.form_data.viz_type, this.props.datasource_type);
+  onChange(name, value) {
+    this.props.actions.setFieldValue(this.props.datasource_type, name, value);
   }
 
   filterSectionsToRender() {
@@ -53,11 +51,27 @@ class ControlPanelsContainer extends React.Component {
 
   fieldOverrides() {
     const viz = visTypes[this.props.form_data.viz_type];
-    return viz.fieldOverrides;
+    return viz.fieldOverrides || {};
   }
   removeAlert() {
     this.props.actions.removeControlPanelAlert();
   }
+  getFieldData(fs) {
+    const fieldOverrides = this.fieldOverrides();
+    let fieldData = this.props.fields[fs];
+    if (fieldOverrides.hasOwnProperty(fs)) {
+      const overrideData = fieldOverrides[fs];
+      fieldData = Object.assign({}, fieldData, overrideData);
+    }
+    if (fieldData.getProps) {
+      Object.assign(fieldData, fieldData.getProps(this.props.exploreState));
+    }
+    return fieldData;
+  }
+  sectionsToRender() {
+    return sectionsToRender(this.props.form_data.viz_type, this.props.datasource_type);
+  }
+
 
   render() {
     return (
@@ -84,11 +98,14 @@ class ControlPanelsContainer extends React.Component {
                   {section.fieldSetRows.map((fieldSets, i) => (
                     <FieldSetRow
                       key={`${section.label}-fieldSetRow-${i}`}
-                      fieldSets={fieldSets}
-                      fieldOverrides={this.fieldOverrides()}
-                      onChange={this.onChange.bind(this)}
-                      fields={this.props.fields}
-                      form_data={this.props.form_data}
+                      fields={fieldSets.map(fieldName => (
+                        <FieldContainer
+                          name={fieldName}
+                          onChange={this.onChange.bind(this)}
+                          value={this.props.form_data[fieldName]}
+                          {...this.getFieldData.bind(this)(fieldName)}
+                        />
+                      ))}
                     />
                   ))}
                 </ControlPanelSection>
@@ -122,6 +139,7 @@ function mapStateToProps(state) {
     alert: state.controlPanelAlert,
     isDatasourceMetaLoading: state.isDatasourceMetaLoading,
     fields: state.fields,
+    exploreState: state,
   };
 }
 
@@ -132,5 +150,4 @@ function mapDispatchToProps(dispatch) {
 }
 
 export { ControlPanelsContainer };
-
 export default connect(mapStateToProps, mapDispatchToProps)(ControlPanelsContainer);

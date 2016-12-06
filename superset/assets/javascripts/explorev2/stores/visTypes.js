@@ -25,7 +25,8 @@ export const commonControlPanelSections = {
   sqlClause: {
     label: 'SQL',
     fieldSetRows: [
-      ['where', 'having'],
+      ['where'],
+      ['having'],
     ],
     description: 'This section exposes ways to include snippets of SQL in your query',
   },
@@ -718,4 +719,3 @@ export function sectionsToRender(vizType, datasourceType) {
     viz.controlPanelSections, timeSection, sqlClause);
   return sections;
 }
-
