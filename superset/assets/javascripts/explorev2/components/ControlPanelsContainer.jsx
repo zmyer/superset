@@ -44,8 +44,11 @@ class ControlPanelsContainer extends React.Component {
   }
 
   getFieldData(fs) {
-    const fieldOverrides = this.fieldOverrides();
-    let fieldData = this.props.fields[fs];
+    const fieldOverrides = this.fieldOverrides.bind(this)();
+    if (!this.props.fields) {
+      return null;
+    }
+    let fieldData = this.props.fields[fs] || {};
     if (fieldOverrides.hasOwnProperty(fs)) {
       const overrideData = fieldOverrides[fs];
       fieldData = Object.assign({}, fieldData, overrideData);

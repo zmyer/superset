@@ -496,7 +496,7 @@ export const fields = {
   },
 
   treemap_ratio: {
-    type: 'IntegerField',
+    type: 'TextField',
     label: 'Ratio',
     default: 0.5 * (1 + Math.sqrt(5)),  // d3 default, golden ratio
     description: 'Target aspect ratio for treemap tiles.',
@@ -548,7 +548,7 @@ export const fields = {
   },
 
   rolling_periods: {
-    type: 'IntegerField',
+    type: 'TextField',
     label: 'Periods',
     validators: [],
     description: 'Defines the size of the rolling window function, ' +
@@ -885,7 +885,7 @@ export const fields = {
   },
 
   num_period_compare: {
-    type: 'IntegerField',
+    type: 'TextField',
     label: 'Period Ratio',
     default: '',
     validators: [],
@@ -989,7 +989,7 @@ export const fields = {
   },
 
   global_opacity: {
-    type: 'IntegerField',
+    type: 'TextField',
     label: 'Opacity',
     default: 1,
     description: 'Opacity of all clusters, points, and labels. ' +
@@ -997,7 +997,7 @@ export const fields = {
   },
 
   viewport_zoom: {
-    type: 'IntegerField',
+    type: 'TextField',
     label: 'Zoom',
     default: 11,
     validators: [],
@@ -1006,7 +1006,7 @@ export const fields = {
   },
 
   viewport_latitude: {
-    type: 'IntegerField',
+    type: 'TextField',
     label: 'Default latitude',
     default: 37.772123,
     description: 'Latitude of default viewport',
@@ -1014,7 +1014,7 @@ export const fields = {
   },
 
   viewport_longitude: {
-    type: 'IntegerField',
+    type: 'TextField',
     label: 'Default longitude',
     default: -122.405293,
     description: 'Longitude of default viewport',

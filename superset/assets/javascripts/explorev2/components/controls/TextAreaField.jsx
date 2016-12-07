@@ -26,6 +26,7 @@ export default class TextAreaField extends React.Component {
         <FormControl
           componentClass="textarea"
           placeholder="textarea"
+          rows={10}
           onChange={this.onChange.bind(this)}
           value={this.props.value}
         />
