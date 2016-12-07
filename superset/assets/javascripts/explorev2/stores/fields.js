@@ -975,10 +975,10 @@ export const fields = {
     description: 'The radius of individual points (ones that are not in a cluster). ' +
                  'Either a numerical column or `Auto`, which scales the point based ' +
                  'on the largest cluster',
-  },
     getProps: (state) => ({
       choices: state.fields.point_radius.choices,
     }),
+  },
 
   point_radius_unit: {
     type: 'SelectField',

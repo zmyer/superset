@@ -51,9 +51,7 @@ export default class SelectField extends React.Component {
     return opt.label;
   }
   render() {
-    const choices = this.props.choices.map || [];
-    console.log(this.props.name);
-    console.log(choices);
+    const choices = this.props.choices || [];
     const options = choices.map((c) => ({ value: c[0], label: c[1] }));
     if (this.props.freeForm) {
       // For FreeFormSelect, insert value into options if not exist

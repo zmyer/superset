@@ -224,7 +224,8 @@ const visTypes = {
       {
         label: null,
         fieldSetRows: [
-          ['markup_type', 'code'],
+          ['markup_type'],
+          ['code'],
         ],
       },
     ],

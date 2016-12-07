@@ -43,19 +43,6 @@ class ControlPanelsContainer extends React.Component {
     this.props.actions.setFieldValue(this.props.datasource_type, name, value);
   }
 
-  filterSectionsToRender() {
-    const filterSections = this.props.datasource_type === 'table' ?
-      [commonControlPanelSections.filters[0]] : commonControlPanelSections.filters;
-    return filterSections;
-  }
-
-  fieldOverrides() {
-    const viz = visTypes[this.props.form_data.viz_type];
-    return viz.fieldOverrides || {};
-  }
-  removeAlert() {
-    this.props.actions.removeControlPanelAlert();
-  }
   getFieldData(fs) {
     const fieldOverrides = this.fieldOverrides();
     let fieldData = this.props.fields[fs];
@@ -73,22 +60,36 @@ class ControlPanelsContainer extends React.Component {
   }
 
 
+  filterSectionsToRender() {
+    const filterSections = this.props.datasource_type === 'table' ?
+      [commonControlPanelSections.filters[0]] : commonControlPanelSections.filters;
+    return filterSections;
+  }
+
+  fieldOverrides() {
+    const viz = visTypes[this.props.form_data.viz_type];
+    return viz.fieldOverrides || {};
+  }
+  removeAlert() {
+    this.props.actions.removeControlPanelAlert();
+  }
+
   render() {
     return (
-      <Panel>
-        {this.props.alert &&
-          <Alert bsStyle="warning">
-            {this.props.alert}
-            <i
-              className="fa fa-close pull-right"
-              onClick={this.removeAlert.bind(this)}
-              style={{ cursor: 'pointer' }}
-            />
-          </Alert>
-        }
-        {!this.props.isDatasourceMetaLoading &&
-          <div className="scrollbar-container">
-            <div className="scrollbar-content">
+      <div className="scrollbar-container">
+        <Panel className="scrollbar-content">
+          {this.props.alert &&
+            <Alert bsStyle="warning">
+              {this.props.alert}
+              <i
+                className="fa fa-close pull-right"
+                onClick={this.removeAlert.bind(this)}
+                style={{ cursor: 'pointer' }}
+              />
+            </Alert>
+          }
+          {!this.props.isDatasourceMetaLoading &&
+            <div>
               {this.sectionsToRender().map((section) => (
                 <ControlPanelSection
                   key={section.label}
@@ -125,9 +126,9 @@ class ControlPanelsContainer extends React.Component {
                 </ControlPanelSection>
               ))}
             </div>
-          </div>
-        }
-      </Panel>
+          }
+        </Panel>
+      </div>
     );
   }
 }
