@@ -105,6 +105,9 @@ export const exploreReducer = function (state, action) {
         { viz: Object.assign({}, state.viz, { form_data: newFormData }) }
       );
     },
+    [actions.SET_DATASOURCE]() {
+      return Object.assign({}, state, { datasource: action.datasource });
+    },
     [actions.CHART_UPDATE_SUCCEEDED]() {
       const vizUpdates = {
         query: action.query,

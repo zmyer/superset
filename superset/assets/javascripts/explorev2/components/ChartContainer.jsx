@@ -45,7 +45,6 @@ class ChartContainer extends React.Component {
       mockSlice: {},
     };
   }
-
   componentWillMount() {
     this.setState({ mockSlice: this.getMockedSliceObject(this.props) });
   }
@@ -73,23 +72,18 @@ class ChartContainer extends React.Component {
   getMockedSliceObject(props) {
     return {
       viewSqlQuery: props.query,
-
       data: {
         csv_endpoint: props.csv_endpoint,
         json_endpoint: props.json_endpoint,
         standalone_endpoint: props.standalone_endpoint,
       },
-
       containerId: props.containerId,
-
       jsonEndpoint: () => props.json_endpoint,
-
       container: {
         html: (data) => {
           // this should be a callback to clear the contents of the slice container
           $(this.state.selector).html(data);
         },
-
         css: (dim, size) => {
           // dimension can be 'height'
           // pixel string can be '300px'
@@ -97,46 +91,33 @@ class ChartContainer extends React.Component {
           $(this.state.selector).css(dim, size);
         },
         height: () => parseInt(props.height, 10) - 100,
-
         show: () => { this.render(); },
-
         get: (n) => ($(this.state.selector).get(n)),
-
         find: (classname) => ($(this.state.selector).find(classname)),
-
       },
-
       width: () => this.chartContainerRef.getBoundingClientRect().width,
-
       height: () => parseInt(props.height, 10) - 100,
-
       selector: this.state.selector,
-
       setFilter: () => {
         // set filter according to data in store
         // used in FilterBox.onChange()
       },
-
       getFilters: () => (
         // return filter objects from viz.formData
         {}
       ),
-
       done: (payload) => {
         // finished rendering callback
         // Todo: end timer and chartLoading set to success
         props.actions.chartUpdateSucceeded(payload.query);
       },
-
       clearError: () => {
         // no need to do anything here since Alert is closable
         // query button will also remove Alert
       },
-
       error(msg) {
         props.actions.chartUpdateFailed(msg);
       },
-
       d3format: (col, number) => {
         // mock d3format function in Slice object in superset.js
         const format = props.column_formats[col];

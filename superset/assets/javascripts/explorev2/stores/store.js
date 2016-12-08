@@ -39,6 +39,7 @@ export function defaultViz(vizType, datasourceType = 'table') {
 export function initialState(vizType = 'table', datasourceType = 'table') {
   return {
     dashboards: [],
+    datasource: null,
     isDatasourceMetaLoading: false,
     datasources: null,
     datasource_type: null,

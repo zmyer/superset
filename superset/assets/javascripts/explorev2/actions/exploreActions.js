@@ -27,6 +27,11 @@ export function fetchFailed(error) {
   return { type: FETCH_FAILED, error };
 }
 
+export const SET_DATASOURCE = 'SET_DATASOURCE';
+export function setDatasource(datasource) {
+  return { type: SET_DATASOURCE, datasource };
+}
+
 export function fetchFieldOptions(datasourceId, datasourceType) {
   return function (dispatch) {
     dispatch(fetchStarted());
@@ -39,6 +44,7 @@ export function fetchFieldOptions(datasourceId, datasourceType) {
         url,
         success: (data) => {
           dispatch(setFieldOptions(data.field_options));
+          dispatch(setDatasource(data.datasource));
           dispatch(fetchSucceeded());
         },
         error(error) {
@@ -116,6 +122,25 @@ export function chartUpdateFailed(error) {
 export const UPDATE_EXPLORE_ENDPOINTS = 'UPDATE_EXPLORE_ENDPOINTS';
 export function updateExploreEndpoints(jsonUrl, csvUrl, standaloneUrl) {
   return { type: UPDATE_EXPLORE_ENDPOINTS, jsonUrl, csvUrl, standaloneUrl };
+}
+export function updateExplore(datasource_type, datasource_id, form_data) {
+  return function (dispatch) {
+    dispatch(chartUpdateStarted());
+    const updateUrl = `/superset/update_explore/${datasource_type}/${datasource_id}/`;
+    $.ajax({
+      type: 'POST',
+      url: updateUrl,
+      data: {
+        data: JSON.stringify(form_data),
+      },
+      success: (data) => {
+        dispatch(updateChart(JSON.parse(data)));
+      },
+      error(error) {
+        dispatch(chartUpdateFailed(error.responseJSON.error));
+      },
+    });
+  };
 }
 
 export const REMOVE_CONTROL_PANEL_ALERT = 'REMOVE_CONTROL_PANEL_ALERT';

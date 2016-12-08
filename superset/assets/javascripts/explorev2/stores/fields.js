@@ -32,7 +32,7 @@ export const fields = {
     default: null,
     choices: [],
     getProps: (state) => ({
-      choices: state.fields.datasource.choices,
+      choices: state.datasources || [],
     }),
     clearable: false,
     description: '',
@@ -52,7 +52,7 @@ export const fields = {
     multi: true,
     label: 'Metrics',
     getProps: (state) => ({
-      choices: state.fields.metrics.choices,
+      choices: (state.datasource) ? state.datasource.metrics_combo: [],
     }),
     default: [],
     description: 'One or many metrics to display',
@@ -65,7 +65,7 @@ export const fields = {
     default: [],
     description: 'One or many metrics to display',
     getProps: (state) => ({
-      choices: state.fields.order_by_cols.choices,
+      choices: (state.datasource) ? state.datasource.order_by_choices: [],
     }),
   },
 
@@ -75,7 +75,7 @@ export const fields = {
     default: null,
     description: 'Choose the metric',
     getProps: (state) => ({
-      choices: state.fields.metric.choices,
+      choices: (state.datasource) ? state.datasource.metrics_combo: [],
     }),
   },
 
@@ -221,7 +221,7 @@ export const fields = {
     default: null,
     description: 'A metric to use for color',
     getProps: (state) => ({
-      choices: state.fields.secondary_metric.choices,
+      choices: (state.datasource) ? state.datasource.metrics_combo: [],
     }),
   },
 
@@ -246,7 +246,7 @@ export const fields = {
     default: [],
     description: 'One or many fields to group by',
     getProps: (state) => ({
-      choices: state.fields.groupby.choices,
+      choices: (state.datasource) ? state.datasource.gb_cols : [],
     }),
   },
 
@@ -266,7 +266,7 @@ export const fields = {
     default: [],
     description: 'Columns to display',
     getProps: (state) => ({
-      choices: state.fields.all_columns.choices,
+      choices: (state.datasource) ? state.datasource.all_cols: [],
     }),
   },
 
@@ -276,7 +276,7 @@ export const fields = {
     default: null,
     description: 'Columns to display',
     getProps: (state) => ({
-      choices: state.fields.all_columns_x.choices,
+      choices: (state.datasource) ? state.datasource.all_cols: [],
     }),
   },
 
@@ -286,7 +286,7 @@ export const fields = {
     default: null,
     description: 'Columns to display',
     getProps: (state) => ({
-      choices: state.fields.all_columns_y.choices,
+      choices: (state.datasource) ? state.datasource.all_cols: [],
     }),
   },
 
@@ -394,7 +394,7 @@ export const fields = {
                  'filter below is applied against this column or ' +
                  'expression',
     getProps: (state) => ({
-      choices: state.fields.all_columns_y.choices,
+      choices: (state.datasource) ? state.datasource.all_cols: [],
     }),
   },
 
@@ -408,7 +408,7 @@ export const fields = {
                  'The options here are defined on a per database ' +
                  'engine basis in the Superset source code.',
     getProps: (state) => ({
-      choices: state.fields.time_grain_sqla.choices,
+      choices: (state.datasource) ? state.datasource.time_grain_sqla: [],
     }),
   },
 
@@ -534,7 +534,7 @@ export const fields = {
     default: null,
     description: 'Metric used to define the top series',
     getProps: (state) => ({
-      choices: state.fields.timeseries_limit_metric.choices,
+      choices: (state.datasource) ? state.datasource.metrics_combo: [],
     }),
   },
 
@@ -563,7 +563,7 @@ export const fields = {
                  'Each series is shown as a specific color on the chart and ' +
                  'has a legend toggle',
     getProps: (state) => ({
-      choices: state.fields.series.choices,
+      choices: (state.datasource) ? state.datasource.gb_cols: [],
     }),
   },
 
@@ -573,7 +573,7 @@ export const fields = {
     default: null,
     description: 'This define the element to be plotted on the chart',
     getProps: (state) => ({
-      choices: state.fields.entity.choices,
+      choices: state.datasource.gb_cols,
     }),
   },
 
@@ -583,7 +583,7 @@ export const fields = {
     default: null,
     description: 'Metric assigned to the [X] axis',
     getProps: (state) => ({
-      choices: state.fields.x.choices,
+      choices: (state.datasource) ? state.datasource.gb_cols: [],
     }),
   },
 
@@ -593,7 +593,7 @@ export const fields = {
     default: null,
     description: 'Metric assigned to the [Y] axis',
     getProps: (state) => ({
-      choices: state.fields.y.choices,
+      choices: (state.datasource) ? state.datasource.metrics_combo: [],
     }),
   },
 
@@ -602,7 +602,7 @@ export const fields = {
     label: 'Bubble Size',
     default: null,
     getProps: (state) => ({
-      choices: state.fields.size.choices,
+      choices: (state.datasource) ? state.datasource.metrics_combo: [],
     }),
   },
 
@@ -928,7 +928,7 @@ export const fields = {
                  'Non-numerical columns will be used to label points. ' +
                  'Leave empty to get a count of points in each cluster.',
     getProps: (state) => ({
-      choices: state.fields.mapbox_label.choices,
+      choices: (state.datasource) ? state.datasource.all_cols: [],
     }),
   },
 

@@ -2491,25 +2491,20 @@ class Superset(BaseSupersetView):
             order_by_choices.append((json.dumps([s, False]), s + ' [desc]'))
 
         field_options = {
-            'datasource': [(d.id, d.full_name) for d in datasources],
-            'metrics': datasource.metrics_combo,
-            'order_by_cols': order_by_choices,
-            'metric':  datasource.metrics_combo,
-            'secondary_metric': datasource.metrics_combo,
-            'groupby': gb_cols,
-            'columns': gb_cols,
-            'all_columns': all_cols,
-            'all_columns_x': all_cols,
-            'all_columns_y': all_cols,
-            'timeseries_limit_metric': [('', '')] + datasource.metrics_combo,
-            'series': gb_cols,
-            'entity': gb_cols,
-            'x': datasource.metrics_combo,
-            'y': datasource.metrics_combo,
-            'size': datasource.metrics_combo,
-            'mapbox_label': all_cols,
             'point_radius': [(c, c) for c in (["Auto"] + datasource.column_names)],
-            'filterable_cols': datasource.filterable_column_names,
+            'timeseries_limit_metric': [('', '')] + datasource.metrics_combo,
+        }
+        payload = {
+            'field_options': field_options,
+            'datasources': [(d.id, d.full_name) for d in datasources],
+            'datasource': {
+                'id': datasource.id,
+                'metrics_combo': datasource.metrics_combo,
+                'order_by_choices': order_by_choices,
+                'gb_cols': gb_cols,
+                'all_cols': all_cols,
+                'filterable_cols': datasource.filterable_column_names,
+            }
         }
 
         if (datasource_type == 'table'):
@@ -2522,7 +2517,7 @@ class Superset(BaseSupersetView):
             field_options['time_grain_sqla'] = grain_choices
 
         return Response(
-            json.dumps({'field_options': field_options}),
+            json.dumps(payload),
             mimetype="application/json"
         )
 
