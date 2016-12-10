@@ -67,7 +67,7 @@ bootstrappedState.viz.form_data.filters =
   getFilters(bootstrappedState.viz.form_data, bootstrapData.datasource_type);
 
 const store = createStore(exploreReducer, bootstrappedState,
-  compose(applyMiddleware(thunk), enhancer()),
+  compose(applyMiddleware(thunk), enhancer())
 );
 
 ReactDOM.render(

@@ -123,25 +123,6 @@ export const UPDATE_EXPLORE_ENDPOINTS = 'UPDATE_EXPLORE_ENDPOINTS';
 export function updateExploreEndpoints(jsonUrl, csvUrl, standaloneUrl) {
   return { type: UPDATE_EXPLORE_ENDPOINTS, jsonUrl, csvUrl, standaloneUrl };
 }
-export function updateExplore(datasource_type, datasource_id, form_data) {
-  return function (dispatch) {
-    dispatch(chartUpdateStarted());
-    const updateUrl = `/superset/update_explore/${datasource_type}/${datasource_id}/`;
-    $.ajax({
-      type: 'POST',
-      url: updateUrl,
-      data: {
-        data: JSON.stringify(form_data),
-      },
-      success: (data) => {
-        dispatch(updateChart(JSON.parse(data)));
-      },
-      error(error) {
-        dispatch(chartUpdateFailed(error.responseJSON.error));
-      },
-    });
-  };
-}
 
 export const REMOVE_CONTROL_PANEL_ALERT = 'REMOVE_CONTROL_PANEL_ALERT';
 export function removeControlPanelAlert() {
