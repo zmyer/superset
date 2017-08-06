@@ -1,7 +1,6 @@
 import React from 'react';
+import PropTypes from 'prop-types';
 import {
-  Button as BootstrapButton,
-  ButtonGroup,
   Col,
   FormGroup,
   InputGroup,
@@ -17,26 +16,26 @@ import {
 import Button from '../../components/Button';
 
 import SouthPane from './SouthPane';
+import SaveQuery from './SaveQuery';
 import Timer from '../../components/Timer';
 import SqlEditorLeftBar from './SqlEditorLeftBar';
 import AceEditorWrapper from './AceEditorWrapper';
-import { STATE_BSSTYLE_MAP } from '../constants.js';
+import { STATE_BSSTYLE_MAP } from '../constants';
+import RunQueryActionButton from './RunQueryActionButton';
 
 const propTypes = {
-  actions: React.PropTypes.object.isRequired,
-  height: React.PropTypes.string.isRequired,
-  database: React.PropTypes.object,
-  latestQuery: React.PropTypes.object,
-  networkOn: React.PropTypes.bool,
-  tables: React.PropTypes.array.isRequired,
-  editorQueries: React.PropTypes.array.isRequired,
-  dataPreviewQueries: React.PropTypes.array.isRequired,
-  queryEditor: React.PropTypes.object.isRequired,
-  hideLeftBar: React.PropTypes.bool,
+  actions: PropTypes.object.isRequired,
+  height: PropTypes.string.isRequired,
+  database: PropTypes.object,
+  latestQuery: PropTypes.object,
+  tables: PropTypes.array.isRequired,
+  editorQueries: PropTypes.array.isRequired,
+  dataPreviewQueries: PropTypes.array.isRequired,
+  queryEditor: PropTypes.object.isRequired,
+  hideLeftBar: PropTypes.bool,
 };
 
 const defaultProps = {
-  networkOn: true,
   database: null,
   latestQuery: null,
   hideLeftBar: false,
@@ -61,6 +60,9 @@ class SqlEditor extends React.PureComponent {
       this.startQuery();
     }
   }
+  setQueryEditorSql(sql) {
+    this.props.actions.queryEditorSetSql(this.props.queryEditor, sql);
+  }
   runQuery(runAsync = false) {
     let effectiveRunAsync = runAsync;
     if (!this.props.database.allow_run_sync) {
@@ -84,13 +86,10 @@ class SqlEditor extends React.PureComponent {
     this.props.actions.setActiveSouthPaneTab('Results');
   }
   stopQuery() {
-    this.props.actions.stopQuery(this.props.latestQuery);
+    this.props.actions.postStopQuery(this.props.latestQuery);
   }
   createTableAs() {
     this.startQuery(true, true);
-  }
-  setQueryEditorSql(sql) {
-    this.props.actions.queryEditorSetSql(this.props.queryEditor, sql);
   }
   ctasChanged(event) {
     this.setState({ ctas: event.target.value });
@@ -104,64 +103,7 @@ class SqlEditor extends React.PureComponent {
   }
 
   render() {
-    let runButtons = [];
-    let runText = 'Run Query';
-    let btnStyle = 'primary';
-    if (this.props.queryEditor.selectedText) {
-      runText = 'Run Selection';
-      btnStyle = 'warning';
-    }
-    if (this.props.database && this.props.database.allow_run_sync) {
-      runButtons.push(
-        <BootstrapButton
-          bsSize="small"
-          bsStyle={btnStyle}
-          style={{ width: '100px' }}
-          onClick={this.runQuery.bind(this, false)}
-          disabled={!(this.props.queryEditor.dbId)}
-          key="run-btn"
-        >
-          <i className="fa fa-table" /> {runText}
-        </BootstrapButton>
-      );
-    }
-    if (this.props.database && this.props.database.allow_run_async) {
-      const asyncToolTip = 'Run query asynchronously';
-      runButtons.push(
-        <Button
-          bsSize="small"
-          bsStyle={btnStyle}
-          style={{ width: '100px' }}
-          onClick={this.runQuery.bind(this, true)}
-          disabled={!(this.props.queryEditor.dbId)}
-          key="run-async-btn"
-          tooltip={asyncToolTip}
-        >
-          <i className="fa fa-table" /> Run Async
-        </Button>
-      );
-    }
-    runButtons = (
-      <ButtonGroup bsSize="small" className="inline m-r-5 pull-left">
-        {runButtons}
-      </ButtonGroup>
-    );
-    if (
-        this.props.latestQuery &&
-        ['running', 'pending'].indexOf(this.props.latestQuery.state) > -1) {
-      runButtons = (
-        <ButtonGroup bsSize="small" className="inline m-r-5 pull-left">
-          <BootstrapButton
-            bsStyle="primary"
-            bsSize="small"
-            style={{ width: '100px' }}
-            onClick={this.stopQuery.bind(this)}
-          >
-            <a className="fa fa-stop" /> Stop
-          </BootstrapButton>
-        </ButtonGroup>
-      );
-    }
+    const qe = this.props.queryEditor;
     let limitWarning = null;
     if (this.props.latestQuery && this.props.latestQuery.limit_reached) {
       const tooltip = (
@@ -205,10 +147,24 @@ class SqlEditor extends React.PureComponent {
       );
     }
     const editorBottomBar = (
-      <div className="sql-toolbar clearfix">
+      <div className="sql-toolbar clearfix" id="js-sql-toolbar">
         <div className="pull-left">
           <Form inline>
-            {runButtons}
+            <RunQueryActionButton
+              allowAsync={this.props.database ? this.props.database.allow_run_async : false}
+              dbId={qe.dbId}
+              queryState={this.props.latestQuery && this.props.latestQuery.state}
+              runQuery={this.runQuery.bind(this)}
+              selectedText={qe.selectedText}
+              stopQuery={this.stopQuery.bind(this)}
+            />
+            <SaveQuery
+              defaultLabel={qe.title}
+              sql={qe.sql}
+              onSave={this.props.actions.saveQuery}
+              schema={qe.schema}
+              dbId={qe.dbId}
+            />
             {ctasControls}
           </Form>
         </div>
@@ -237,36 +193,41 @@ class SqlEditor extends React.PureComponent {
           <Collapse
             in={!this.props.hideLeftBar}
           >
-            <Col md={3}>
+            <Col
+              xs={6}
+              sm={5}
+              md={4}
+              lg={3}
+            >
               <SqlEditorLeftBar
-                style={{ height: this.props.height }}
+                height={this.sqlEditorHeight()}
                 queryEditor={this.props.queryEditor}
                 tables={this.props.tables}
-                networkOn={this.props.networkOn}
                 actions={this.props.actions}
               />
             </Col>
           </Collapse>
-          <Col md={this.props.hideLeftBar ? 12 : 9}>
-            <div className="scrollbar-container">
-              <div className="scrollbar-content">
-                <AceEditorWrapper
-                  actions={this.props.actions}
-                  onBlur={this.setQueryEditorSql.bind(this)}
-                  queryEditor={this.props.queryEditor}
-                  onAltEnter={this.runQuery.bind(this)}
-                  sql={this.props.queryEditor.sql}
-                  tables={this.props.tables}
-                />
-                {editorBottomBar}
-                <br />
-                <SouthPane
-                  editorQueries={this.props.editorQueries}
-                  dataPreviewQueries={this.props.dataPreviewQueries}
-                  actions={this.props.actions}
-                />
-              </div>
-            </div>
+          <Col
+            xs={this.props.hideLeftBar ? 12 : 6}
+            sm={this.props.hideLeftBar ? 12 : 7}
+            md={this.props.hideLeftBar ? 12 : 8}
+            lg={this.props.hideLeftBar ? 12 : 9}
+          >
+            <AceEditorWrapper
+              actions={this.props.actions}
+              onBlur={this.setQueryEditorSql.bind(this)}
+              queryEditor={this.props.queryEditor}
+              onAltEnter={this.runQuery.bind(this)}
+              sql={this.props.queryEditor.sql}
+              tables={this.props.tables}
+            />
+            {editorBottomBar}
+            <br />
+            <SouthPane
+              editorQueries={this.props.editorQueries}
+              dataPreviewQueries={this.props.dataPreviewQueries}
+              actions={this.props.actions}
+            />
           </Col>
         </Row>
       </div>

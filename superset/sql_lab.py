@@ -1,22 +1,31 @@
-import celery
+from time import sleep
 from datetime import datetime
 import json
 import logging
 import pandas as pd
 import sqlalchemy
 import uuid
-import zlib
 
+from celery.exceptions import SoftTimeLimitExceeded
 from sqlalchemy.pool import NullPool
 from sqlalchemy.orm import sessionmaker
 
 from superset import (
-    app, db, models, utils, dataframe, results_backend, sql_parse)
+    app, db, utils, dataframe, results_backend)
+from superset.models.sql_lab import Query
+from superset.sql_parse import SupersetQuery
 from superset.db_engine_specs import LimitMethod
 from superset.jinja_context import get_template_processor
-QueryStatus = models.QueryStatus
+from superset.utils import QueryStatus, get_celery_app
 
-celery_app = celery.Celery(config_source=app.config.get('CELERY_CONFIG'))
+config = app.config
+celery_app = get_celery_app(config)
+stats_logger = app.config.get('STATS_LOGGER')
+SQLLAB_TIMEOUT = config.get('SQLLAB_ASYNC_TIME_LIMIT_SEC', 600)
+
+
+class SqlLabException(Exception):
+    pass
 
 
 def dedup(l, suffix='__'):
@@ -40,44 +49,68 @@ def dedup(l, suffix='__'):
     return new_l
 
 
-def create_table_as(sql, table_name, override=False):
-    """Reformats the query into the create table as query.
-
-    Works only for the single select SQL statements, in all other cases
-    the sql query is not modified.
-    :param superset_query: string, sql query that will be executed
-    :param table_name: string, will contain the results of the query execution
-    :param override, boolean, table table_name will be dropped if true
-    :return: string, create table as query
-    """
-    # TODO(bkyryliuk): enforce that all the columns have names. Presto requires it
-    #                  for the CTA operation.
-    # TODO(bkyryliuk): drop table if allowed, check the namespace and
-    #                  the permissions.
-    # TODO raise if multi-statement
-    exec_sql = ''
-    if override:
-        exec_sql = 'DROP TABLE IF EXISTS {table_name};\n'
-    exec_sql += "CREATE TABLE {table_name} AS \n{sql}"
-    return exec_sql.format(**locals())
+def get_query(query_id, session, retry_count=5):
+    """attemps to get the query and retry if it cannot"""
+    query = None
+    attempt = 0
+    while not query and attempt < retry_count:
+        try:
+            query = session.query(Query).filter_by(id=query_id).one()
+        except Exception:
+            attempt += 1
+            logging.error(
+                "Query with id `{}` could not be retrieved".format(query_id))
+            stats_logger.incr('error_attempting_orm_query_' + str(attempt))
+            logging.error("Sleeping for a sec before retrying...")
+            sleep(1)
+    if not query:
+        stats_logger.incr('error_failed_at_getting_orm_query')
+        raise SqlLabException("Failed at getting query")
+    return query
 
 
-@celery_app.task(bind=True)
-def get_sql_results(self, query_id, return_results=True, store_results=False):
-    """Executes the sql query returns the results."""
-    if not self.request.called_directly:
+def get_session(nullpool):
+    if nullpool:
         engine = sqlalchemy.create_engine(
             app.config.get('SQLALCHEMY_DATABASE_URI'), poolclass=NullPool)
         session_class = sessionmaker()
         session_class.configure(bind=engine)
-        session = session_class()
+        return session_class()
     else:
         session = db.session()
         session.commit()  # HACK
-    query = session.query(models.Query).filter_by(id=query_id).one()
+        return session
+
+
+@celery_app.task(bind=True, soft_time_limit=SQLLAB_TIMEOUT)
+def get_sql_results(
+        ctask, query_id, return_results=True, store_results=False):
+    """Executes the sql query returns the results."""
+    try:
+        return execute_sql(
+            ctask, query_id, return_results, store_results)
+    except Exception as e:
+        logging.exception(e)
+        stats_logger.incr('error_sqllab_unhandled')
+        sesh = get_session(not ctask.request.called_directly)
+        query = get_query(query_id, sesh)
+        query.error_message = str(e)
+        query.status = QueryStatus.FAILED
+        query.tmp_table_name = None
+        sesh.commit()
+        raise
+
+
+def execute_sql(ctask, query_id, return_results=True, store_results=False):
+    """Executes the sql query returns the results."""
+    session = get_session(not ctask.request.called_directly)
+
+    query = get_query(query_id, session)
+    payload = dict(query_id=query_id)
+
     database = query.database
-    executed_sql = query.sql.strip().strip(';')
     db_engine_spec = database.db_engine_spec
+    db_engine_spec.patch()
 
     def handle_error(msg):
         """Local method handling error while processing the SQL"""
@@ -85,100 +118,130 @@ def get_sql_results(self, query_id, return_results=True, store_results=False):
         query.status = QueryStatus.FAILED
         query.tmp_table_name = None
         session.commit()
-        raise Exception(query.error_message)
+        payload.update({
+            'status': query.status,
+            'error_essage': msg,
+        })
+        return payload
 
     if store_results and not results_backend:
-        handle_error("Results backend isn't configured.")
+        return handle_error("Results backend isn't configured.")
 
     # Limit enforced only for retrieving the data, not for the CTA queries.
-    superset_query = sql_parse.SupersetQuery(executed_sql)
+    superset_query = SupersetQuery(query.sql)
+    executed_sql = superset_query.stripped()
     if not superset_query.is_select() and not database.allow_dml:
-        handle_error(
+        return handle_error(
             "Only `SELECT` statements are allowed against this database")
     if query.select_as_cta:
         if not superset_query.is_select():
-            handle_error(
+            return handle_error(
                 "Only `SELECT` statements can be used with the CREATE TABLE "
                 "feature.")
+            return
         if not query.tmp_table_name:
             start_dttm = datetime.fromtimestamp(query.start_time)
             query.tmp_table_name = 'tmp_{}_table_{}'.format(
                 query.user_id,
                 start_dttm.strftime('%Y_%m_%d_%H_%M_%S'))
-        executed_sql = create_table_as(
-            executed_sql, query.tmp_table_name)
+        executed_sql = superset_query.as_create_table(query.tmp_table_name)
         query.select_as_cta_used = True
     elif (
             query.limit and superset_query.is_select() and
             db_engine_spec.limit_method == LimitMethod.WRAP_SQL):
         executed_sql = database.wrap_sql_limit(executed_sql, query.limit)
         query.limit_used = True
-    engine = database.get_sqla_engine(schema=query.schema)
     try:
         template_processor = get_template_processor(
             database=database, query=query)
         executed_sql = template_processor.process_template(executed_sql)
-        executed_sql = db_engine_spec.sql_preprocessor(executed_sql)
     except Exception as e:
         logging.exception(e)
         msg = "Template rendering failed: " + utils.error_msg_from_exception(e)
-        handle_error(msg)
+        return handle_error(msg)
+
+    query.executed_sql = executed_sql
+    query.status = QueryStatus.RUNNING
+    query.start_running_time = utils.now_as_float()
+    session.merge(query)
+    session.commit()
+    logging.info("Set query to 'running'")
+
+    engine = database.get_sqla_engine(
+            schema=query.schema, nullpool=not ctask.request.called_directly)
     try:
-        query.executed_sql = executed_sql
+        engine = database.get_sqla_engine(
+            schema=query.schema, nullpool=not ctask.request.called_directly)
+        conn = engine.raw_connection()
+        cursor = conn.cursor()
         logging.info("Running query: \n{}".format(executed_sql))
-        result_proxy = engine.execute(query.executed_sql, schema=query.schema)
+        logging.info(query.executed_sql)
+        cursor.execute(
+            query.executed_sql, **db_engine_spec.cursor_execute_kwargs)
+        logging.info("Handling cursor")
+        db_engine_spec.handle_cursor(cursor, query, session)
+        logging.info("Fetching data: {}".format(query.to_dict()))
+        data = db_engine_spec.fetch_data(cursor, query.limit)
+    except SoftTimeLimitExceeded as e:
+        logging.exception(e)
+        conn.close()
+        return handle_error(
+            "SQL Lab timeout. This environment's policy is to kill queries "
+            "after {} seconds.".format(SQLLAB_TIMEOUT))
     except Exception as e:
         logging.exception(e)
-        handle_error(utils.error_msg_from_exception(e))
+        conn.close()
+        return handle_error(db_engine_spec.extract_error_message(e))
 
-    cursor = result_proxy.cursor
-    query.status = QueryStatus.RUNNING
-    session.flush()
-    db_engine_spec.handle_cursor(cursor, query, session)
+    logging.info("Fetching cursor description")
+    cursor_description = cursor.description
 
-    cdf = None
-    if result_proxy.cursor:
-        column_names = [col[0] for col in result_proxy.cursor.description]
-        column_names = dedup(column_names)
-        if db_engine_spec.limit_method == LimitMethod.FETCH_MANY:
-            data = result_proxy.fetchmany(query.limit)
-        else:
-            data = result_proxy.fetchall()
-        cdf = dataframe.SupersetDataFrame(
-            pd.DataFrame(data, columns=column_names))
+    conn.commit()
+    conn.close()
 
-    query.rows = result_proxy.rowcount
+    if query.status == utils.QueryStatus.STOPPED:
+        return json.dumps({
+            'query_id': query.id,
+            'status': query.status,
+            'query': query.to_dict(),
+        }, default=utils.json_iso_dttm_ser)
+
+    column_names = (
+        [col[0] for col in cursor_description] if cursor_description else [])
+    column_names = dedup(column_names)
+    cdf = dataframe.SupersetDataFrame(pd.DataFrame(
+        list(data), columns=column_names))
+
+    query.rows = cdf.size
     query.progress = 100
     query.status = QueryStatus.SUCCESS
-    if query.rows == -1 and cdf:
-        # Presto doesn't provide result_proxy.row_count
-        query.rows = cdf.size
     if query.select_as_cta:
         query.select_sql = '{}'.format(database.select_star(
             query.tmp_table_name,
             limit=query.limit,
-            schema=database.force_ctas_schema
+            schema=database.force_ctas_schema,
+            show_cols=False,
+            latest_partition=False,
         ))
     query.end_time = utils.now_as_float()
+    session.merge(query)
     session.flush()
 
-    payload = {
-        'query_id': query.id,
+    payload.update({
         'status': query.status,
-        'data': [],
-    }
-    payload['data'] = cdf.data if cdf else []
-    payload['columns'] = cdf.columns_dict if cdf else []
-    payload['query'] = query.to_dict()
-    payload = json.dumps(payload, default=utils.json_iso_dttm_ser)
-
+        'data': cdf.data if cdf.data else [],
+        'columns': cdf.columns if cdf.columns else [],
+        'query': query.to_dict(),
+    })
     if store_results:
         key = '{}'.format(uuid.uuid4())
         logging.info("Storing results in results backend, key: {}".format(key))
-        results_backend.set(key, zlib.compress(payload))
+        json_payload = json.dumps(payload, default=utils.json_iso_dttm_ser)
+        results_backend.set(key, utils.zlib_compress(json_payload))
         query.results_key = key
+        query.end_result_backend_time = utils.now_as_float()
 
-    session.flush()
+    session.merge(query)
     session.commit()
 
     if return_results:

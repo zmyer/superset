@@ -12,12 +12,22 @@ from __future__ import unicode_literals
 import imp
 import json
 import os
+import sys
+from collections import OrderedDict
 
 from dateutil import tz
 from flask_appbuilder.security.manager import AUTH_DB
 
+from superset.stats_logger import DummyStatsLogger
+
+# Realtime stats logger, a StatsD implementation exists
+STATS_LOGGER = DummyStatsLogger()
+
 BASE_DIR = os.path.abspath(os.path.dirname(__file__))
-DATA_DIR = os.path.join(os.path.expanduser('~'), '.superset')
+if 'SUPERSET_HOME' in os.environ:
+    DATA_DIR = os.environ['SUPERSET_HOME']
+else:
+    DATA_DIR = os.path.join(os.path.expanduser('~'), '.superset')
 if not os.path.exists(DATA_DIR):
     os.makedirs(DATA_DIR)
 
@@ -30,13 +40,16 @@ with open(PACKAGE_FILE) as package_file:
     VERSION_STRING = json.load(package_file)['version']
 
 ROW_LIMIT = 50000
+VIZ_ROW_LIMIT = 10000
 SUPERSET_WORKERS = 2
+SUPERSET_CELERY_WORKERS = 32
 
 SUPERSET_WEBSERVER_ADDRESS = '0.0.0.0'
 SUPERSET_WEBSERVER_PORT = 8088
 SUPERSET_WEBSERVER_TIMEOUT = 60
-
+EMAIL_NOTIFICATIONS = False
 CUSTOM_SECURITY_MANAGER = None
+SQLALCHEMY_TRACK_MODIFICATIONS = False
 # ---------------------------------------------------------
 
 # Your App secret key
@@ -51,10 +64,11 @@ SQLALCHEMY_DATABASE_URI = 'sqlite:///' + os.path.join(DATA_DIR, 'superset.db')
 QUERY_SEARCH_LIMIT = 1000
 
 # Flask-WTF flag for CSRF
-CSRF_ENABLED = True
+WTF_CSRF_ENABLED = True
 
 # Whether to run the web server in debug mode or not
 DEBUG = False
+FLASK_USE_RELOAD = True
 
 # Whether to show the stacktrace on 500 error
 SHOW_STACKTRACE = True
@@ -68,15 +82,19 @@ ENABLE_PROXY_FIX = False
 # Uncomment to setup Your App name
 APP_NAME = "Superset"
 
-# Uncomment to setup Setup an App icon
+# Uncomment to setup an App icon
 APP_ICON = "/static/assets/images/superset-logo@2x.png"
 
 # Druid query timezone
 # tz.tzutc() : Using utc timezone
 # tz.tzlocal() : Using local timezone
+# tz.gettz('Asia/Shanghai') : Using the time zone with specific name
+# [TimeZone List]
+# See: https://en.wikipedia.org/wiki/List_of_tz_database_time_zones
 # other tz can be overridden by providing a local_config
 DRUID_IS_ACTIVE = True
 DRUID_TZ = tz.tzutc()
+DRUID_ANALYSIS_TYPES = ['cardinality']
 
 # ----------------------------------------------------
 # AUTHENTICATION CONFIG
@@ -128,6 +146,7 @@ BABEL_DEFAULT_FOLDER = 'babel/translations'
 # The allowed translation for you app
 LANGUAGES = {
     'en': {'flag': 'us', 'name': 'English'},
+    'it': {'flag': 'it', 'name': 'Italian'},
     # 'fr': {'flag': 'fr', 'name': 'French'},
     # 'zh': {'flag': 'cn', 'name': 'Chinese'},
 }
@@ -145,8 +164,9 @@ IMG_UPLOAD_URL = '/static/uploads/'
 # Setup image size default is (300, 200, True)
 # IMG_SIZE = (300, 200, True)
 
-CACHE_DEFAULT_TIMEOUT = None
+CACHE_DEFAULT_TIMEOUT = 60 * 60 * 24
 CACHE_CONFIG = {'CACHE_TYPE': 'null'}
+TABLE_NAMES_CACHE_CONFIG = {'CACHE_TYPE': 'null'}
 
 # CORS Options
 ENABLE_CORS = False
@@ -170,7 +190,10 @@ DRUID_DATA_SOURCE_BLACKLIST = []
 # --------------------------------------------------
 # Modules, datasources and middleware to be registered
 # --------------------------------------------------
-DEFAULT_MODULE_DS_MAP = {'superset.models': ['DruidDatasource', 'SqlaTable']}
+DEFAULT_MODULE_DS_MAP = OrderedDict([
+    ('superset.connectors.sqla.models', ['SqlaTable']),
+    ('superset.connectors.druid.models', ['DruidDatasource']),
+])
 ADDITIONAL_MODULE_DS_MAP = {}
 ADDITIONAL_MIDDLEWARE = []
 
@@ -200,7 +223,11 @@ BACKUP_COUNT = 30
 MAPBOX_API_KEY = ""
 
 # Maximum number of rows returned in the SQL editor
-SQL_MAX_ROW = 1000
+SQL_MAX_ROW = 1000000
+DISPLAY_SQL_MAX_ROW = 1000
+
+# Maximum number of tables/views displayed in the dropdown window in SQL Lab.
+MAX_TABLE_NAMES = 3000
 
 # If defined, shows this text in an alert-warning box in the navbar
 # one example use case may be "STAGING" to make it clear that this is
@@ -217,6 +244,7 @@ class CeleryConfig(object):
   CELERY_IMPORTS = ('superset.sql_lab', )
   CELERY_RESULT_BACKEND = 'db+sqlite:///celery_results.sqlite'
   CELERY_ANNOTATIONS = {'tasks.add': {'rate_limit': '10/s'}}
+  CELERYD_LOG_LEVEL = 'DEBUG'
 CELERY_CONFIG = CeleryConfig
 """
 CELERY_CONFIG = None
@@ -238,6 +266,10 @@ SQLLAB_TIMEOUT = 30
 # SQLLAB_DEFAULT_DBID
 SQLLAB_DEFAULT_DBID = None
 
+# The MAX duration (in seconds) a query can run for before being killed
+# by celery.
+SQLLAB_ASYNC_TIME_LIMIT_SEC = 60 * 60 * 6
+
 # An instantiated derivative of werkzeug.contrib.cache.BaseCache
 # if enabled, it can be used to store the results of long-running queries
 # in SQL Lab by using the "Run Async" button/feature
@@ -255,16 +287,51 @@ ROBOT_PERMISSION_ROLES = ['Public', 'Gamma', 'Alpha', 'Admin', 'sql_lab']
 
 CONFIG_PATH_ENV_VAR = 'SUPERSET_CONFIG_PATH'
 
+
+# smtp server configuration
+EMAIL_NOTIFICATIONS = False  # all the emails are sent using dryrun
+SMTP_HOST = 'localhost'
+SMTP_STARTTLS = True
+SMTP_SSL = False
+SMTP_USER = 'superset'
+SMTP_PORT = 25
+SMTP_PASSWORD = 'superset'
+SMTP_MAIL_FROM = 'superset@superset.com'
+
+if not CACHE_DEFAULT_TIMEOUT:
+    CACHE_DEFAULT_TIMEOUT = CACHE_CONFIG.get('CACHE_DEFAULT_TIMEOUT')
+
+# Whether to bump the logging level to ERRROR on the flask_appbiulder package
+# Set to False if/when debugging FAB related issues like
+# permission management
+SILENCE_FAB = True
+
+
+# Integrate external Blueprints to the app by passing them to your
+# configuration. These blueprints will get integrated in the app
+BLUEPRINTS = []
+
+# Provide a callable that receives a tracking_url and returns another
+# URL. This is used to translate internal Hadoop job tracker URL
+# into a proxied one
+TRACKING_URL_TRANSFORMER = lambda x: x
+
 try:
     if CONFIG_PATH_ENV_VAR in os.environ:
         # Explicitly import config module that is not in pythonpath; useful
         # for case where app is being executed via pex.
-        imp.load_source('superset_config', os.environ[CONFIG_PATH_ENV_VAR])
+        print('Loaded your LOCAL configuration at [{}]'.format(
+            os.environ[CONFIG_PATH_ENV_VAR]))
+        module = sys.modules[__name__]
+        override_conf = imp.load_source('superset_config', os.environ[CONFIG_PATH_ENV_VAR])
+        for key in dir(override_conf):
+            if key.isupper():
+                setattr(module, key, getattr(override_conf, key))
 
-    from superset_config import *  # noqa
-    print('Loaded your LOCAL configuration')
+    else:
+        from superset_config import *  # noqa
+        import superset_config
+        print('Loaded your LOCAL configuration at [{}]'.format(
+            superset_config.__file__))
 except ImportError:
     pass
-
-if not CACHE_DEFAULT_TIMEOUT:
-    CACHE_DEFAULT_TIMEOUT = CACHE_CONFIG.get('CACHE_DEFAULT_TIMEOUT')

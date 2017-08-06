@@ -1,15 +1,16 @@
-const $ = window.$ = require('jquery');
-
+/* global notify */
 import React from 'react';
+import PropTypes from 'prop-types';
 import { Button, FormControl, FormGroup, Radio } from 'react-bootstrap';
-import { getAjaxErrorMsg, showModal } from '../../modules/utils';
-
+import { getAjaxErrorMsg } from '../../modules/utils';
 import ModalTrigger from '../../components/ModalTrigger';
 
+const $ = window.$ = require('jquery');
+
 const propTypes = {
-  css: React.PropTypes.string,
-  dashboard: React.PropTypes.object.isRequired,
-  triggerNode: React.PropTypes.node.isRequired,
+  css: PropTypes.string,
+  dashboard: PropTypes.object.isRequired,
+  triggerNode: PropTypes.node.isRequired,
 };
 
 class SaveModal extends React.PureComponent {
@@ -40,6 +41,7 @@ class SaveModal extends React.PureComponent {
   saveDashboardRequest(data, url, saveType) {
     const dashboard = this.props.dashboard;
     const saveModal = this.modal;
+    Object.assign(data, { css: this.props.css });
     $.ajax({
       type: 'POST',
       url,
@@ -52,19 +54,13 @@ class SaveModal extends React.PureComponent {
         if (saveType === 'newDashboard') {
           window.location = '/superset/dashboard/' + resp.id + '/';
         } else {
-          showModal({
-            title: 'Success',
-            body: 'This dashboard was saved successfully.',
-          });
+          notify.success('This dashboard was saved successfully.');
         }
       },
       error(error) {
         saveModal.close();
         const errorMsg = getAjaxErrorMsg(error);
-        showModal({
-          title: 'Error',
-          body: 'Sorry, there was an error saving this dashboard: </ br>' + errorMsg,
-        });
+        notify.error('Sorry, there was an error saving this dashboard: </ br>' + errorMsg);
       },
     });
   }
@@ -83,6 +79,7 @@ class SaveModal extends React.PureComponent {
       positions,
       css: this.state.css,
       expanded_slices: expandedSlices,
+      dashboard_title: dashboard.dashboard_title,
     };
     let url = null;
     if (saveType === 'overwrite') {
@@ -107,7 +104,6 @@ class SaveModal extends React.PureComponent {
       <ModalTrigger
         ref={(modal) => { this.modal = modal; }}
         triggerNode={this.props.triggerNode}
-        isButton
         modalTitle="Save Dashboard"
         modalBody={
           <FormGroup>

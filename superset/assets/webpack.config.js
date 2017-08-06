@@ -1,6 +1,7 @@
 const webpack = require('webpack');
 const path = require('path');
-const fs = require('fs');
+const ManifestPlugin = require('webpack-manifest-plugin');
+const CleanWebpackPlugin = require('clean-webpack-plugin');
 
 // input dir
 const APP_DIR = path.resolve(__dirname, './');
@@ -8,35 +9,33 @@ const APP_DIR = path.resolve(__dirname, './');
 // output dir
 const BUILD_DIR = path.resolve(__dirname, './dist');
 
-const VERSION_STRING = JSON.parse(fs.readFileSync('package.json')).version;
-
 const config = {
+  node: {
+    fs: 'empty',
+  },
   entry: {
     'css-theme': APP_DIR + '/javascripts/css-theme.js',
     common: APP_DIR + '/javascripts/common.js',
+    addSlice: ['babel-polyfill', APP_DIR + '/javascripts/addSlice/index.jsx'],
     dashboard: ['babel-polyfill', APP_DIR + '/javascripts/dashboard/Dashboard.jsx'],
-    explore: ['babel-polyfill', APP_DIR + '/javascripts/explore/explore.jsx'],
-    explorev2: ['babel-polyfill', APP_DIR + '/javascripts/explorev2/index.jsx'],
+    explore: ['babel-polyfill', APP_DIR + '/javascripts/explore/index.jsx'],
     sqllab: ['babel-polyfill', APP_DIR + '/javascripts/SqlLab/index.jsx'],
-    standalone: ['babel-polyfill', APP_DIR + '/javascripts/standalone.js'],
     welcome: ['babel-polyfill', APP_DIR + '/javascripts/welcome.js'],
     profile: ['babel-polyfill', APP_DIR + '/javascripts/profile/index.jsx'],
   },
   output: {
     path: BUILD_DIR,
-    filename: `[name].${VERSION_STRING}.entry.js`,
+    filename: '[name].[chunkhash].entry.js',
+    chunkFilename: '[name].[chunkhash].entry.js',
   },
   resolve: {
     extensions: [
-      '',
       '.js',
       '.jsx',
     ],
     alias: {
       webworkify: 'webworkify-webpack',
-      'mapbox-gl/js/geo/transform': path.join(
-        __dirname, '/node_modules/mapbox-gl/js/geo/transform'),
-      'mapbox-gl': path.join(__dirname, '/node_modules/mapbox-gl/dist/mapbox-gl.js'),
+      'mapbox-gl$': path.join(__dirname, '/node_modules/mapbox-gl/dist/mapbox-gl.js'),
     },
 
   },
@@ -45,12 +44,12 @@ const config = {
     loaders: [
       {
         test: /datatables\.net.*/,
-        loader: 'imports?define=>false',
+        loader: 'imports-loader?define=>false',
       },
       {
         test: /\.jsx?$/,
         exclude: APP_DIR + '/node_modules',
-        loader: 'babel',
+        loader: 'babel-loader',
         query: {
           presets: [
             'airbnb',
@@ -59,11 +58,11 @@ const config = {
           ],
         },
       },
-      /* for react-map-gl overlays */
+      /* for mapbox-gl/js/geo/transform */
       {
-        test: /\.react\.js$/,
-        include: APP_DIR + '/node_modules/react-map-gl/src/overlays',
-        loader: 'babel',
+        test: /\.js$/,
+        include: APP_DIR + '/node_modules/mapbox-gl/js',
+        loader: 'babel-loader',
       },
       /* for require('*.css') */
       {
@@ -87,7 +86,7 @@ const config = {
       /* for font-awesome */
       {
         test: /\.woff(2)?(\?v=[0-9]\.[0-9]\.[0-9])?$/,
-        loader: 'url-loader?limit=10000&minetype=application/font-woff',
+        loader: 'url-loader?limit=10000&mimetype=application/font-woff',
       },
       {
         test: /\.(ttf|eot|svg)(\?v=[0-9]\.[0-9]\.[0-9])?$/,
@@ -97,7 +96,7 @@ const config = {
       {
         test: /\.less$/,
         include: APP_DIR,
-        loader: 'style!css!less',
+        loader: 'style-loader!css-loader!less-loader',
       },
       /* for mapbox */
       {
@@ -110,11 +109,6 @@ const config = {
         loader: 'transform/cacheable?brfs',
       },
     ],
-    postLoaders: [{
-      include: /node_modules\/mapbox-gl/,
-      loader: 'transform',
-      query: 'brfs',
-    }],
   },
   externals: {
     cheerio: 'window',
@@ -122,6 +116,8 @@ const config = {
     'react/lib/ReactContext': true,
   },
   plugins: [
+    new ManifestPlugin(),
+    new CleanWebpackPlugin(['dist']),
     new webpack.DefinePlugin({
       'process.env': {
         NODE_ENV: JSON.stringify(process.env.NODE_ENV),
@@ -130,6 +126,16 @@ const config = {
   ],
 };
 if (process.env.NODE_ENV === 'production') {
-  config.plugins.push(new webpack.optimize.UglifyJsPlugin());
+  // Using settings suggested in https://github.com/webpack/webpack/issues/537
+  const UJSplugin = new webpack.optimize.UglifyJsPlugin({
+    sourceMap: false,
+    minimize: true,
+    parallel: {
+      cache: true,
+      workers: 4,
+    },
+    compress: false,
+  });
+  config.plugins.push(UJSplugin);
 }
 module.exports = config;

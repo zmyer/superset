@@ -1,6 +1,30 @@
 /* eslint camelcase: 0 */
-const d3 = require('d3');
-const $ = require('jquery');
+import d3 from 'd3';
+import $ from 'jquery';
+
+import { formatDate, UTC } from './dates';
+
+export function d3FormatPreset(format) {
+  // like d3.format, but with support for presets like 'smart_date'
+  if (format === 'smart_date') {
+    return formatDate;
+  }
+  if (format) {
+    return d3.format(format);
+  }
+  return d3.format('.3s');
+}
+export const d3TimeFormatPreset = function (format) {
+  const effFormat = format || 'smart_date';
+  if (effFormat === 'smart_date') {
+    return formatDate;
+  }
+  const f = d3.time.format(effFormat);
+  return function (dttm) {
+    const d = UTC(new Date(dttm));
+    return f(d);
+  };
+};
 
 /*
   Utility function that takes a d3 svg:text selection and a max width, and splits the
@@ -109,7 +133,11 @@ export function d3format(format, number) {
   if (!(format in formatters)) {
     formatters[format] = d3.format(format);
   }
-  return formatters[format](number);
+  try {
+    return formatters[format](number);
+  } catch (e) {
+    return 'ERR';
+  }
 }
 
 // Slice objects interact with their context through objects that implement
@@ -133,14 +161,14 @@ export function formatSelectOptionsForRange(start, end) {
   // returns [[1,1], [2,2], [3,3], [4,4], [5,5]]
   const options = [];
   for (let i = start; i <= end; i++) {
-    options.push([i.toString(), i.toString()]);
+    options.push([i, i.toString()]);
   }
   return options;
 }
 
 export function formatSelectOptions(options) {
-  return options.map((opt) =>
-     [opt.toString(), opt.toString()]
+  return options.map(opt =>
+     [opt, opt.toString()],
   );
 }
 
@@ -158,4 +186,53 @@ export function getAjaxErrorMsg(error) {
   const respJSON = error.responseJSON;
   return (respJSON && respJSON.message) ? respJSON.message :
           error.responseText;
+}
+
+export function customizeToolTip(chart, xAxisFormatter, yAxisFormatters) {
+  chart.useInteractiveGuideline(true);
+  chart.interactiveLayer.tooltip.contentGenerator(function (d) {
+    const tooltipTitle = xAxisFormatter(d.value);
+    let tooltip = '';
+
+    tooltip += "<table><thead><tr><td colspan='3'>"
+      + `<strong class='x-value'>${tooltipTitle}</strong>`
+      + '</td></tr></thead><tbody>';
+
+    d.series.forEach((series, i) => {
+      const yAxisFormatter = yAxisFormatters[i];
+      const value = yAxisFormatter(series.value);
+      tooltip += "<tr><td class='legend-color-guide'>"
+        + `<div style="background-color: ${series.color};"></div></td>`
+        + `<td class='key'>${series.key}</td>`
+        + `<td class='value'>${value}</td></tr>`;
+    });
+
+    tooltip += '</tbody></table>';
+
+    return tooltip;
+  });
+}
+
+export function initJQueryAjax() {
+  // Works in conjunction with a Flask-WTF token as described here:
+  // http://flask-wtf.readthedocs.io/en/stable/csrf.html#javascript-requests
+  const token = $('input#csrf_token').val();
+  if (token) {
+    $.ajaxSetup({
+      beforeSend(xhr, settings) {
+        if (!/^(GET|HEAD|OPTIONS|TRACE)$/i.test(settings.type) && !this.crossDomain) {
+          xhr.setRequestHeader('X-CSRFToken', token);
+        }
+      },
+    });
+  }
+}
+
+export function tryNumify(s) {
+  // Attempts casting to Number, returns string when failing
+  const n = Number(s);
+  if (isNaN(n)) {
+    return s;
+  }
+  return n;
 }

@@ -1,40 +1,47 @@
 import React from 'react';
+import PropTypes from 'prop-types';
 import { Alert, Button, ButtonGroup, ProgressBar } from 'react-bootstrap';
-import { Table } from 'reactable';
 import shortid from 'shortid';
 
 import VisualizeModal from './VisualizeModal';
 import HighlightedSql from './HighlightedSql';
+import FilterableTable from '../../components/FilterableTable/FilterableTable';
+import QueryStateLabel from './QueryStateLabel';
 
 const propTypes = {
-  actions: React.PropTypes.object,
-  csv: React.PropTypes.bool,
-  query: React.PropTypes.object,
-  search: React.PropTypes.bool,
-  searchText: React.PropTypes.string,
-  showSql: React.PropTypes.bool,
-  visualize: React.PropTypes.bool,
-  cache: React.PropTypes.bool,
+  actions: PropTypes.object,
+  csv: PropTypes.bool,
+  query: PropTypes.object,
+  search: PropTypes.bool,
+  showSql: PropTypes.bool,
+  visualize: PropTypes.bool,
+  cache: PropTypes.bool,
+  height: PropTypes.number.isRequired,
 };
 const defaultProps = {
   search: true,
   visualize: true,
   showSql: false,
   csv: true,
-  searchText: '',
   actions: {},
   cache: false,
 };
 
+const RESULT_SET_CONTROLS_HEIGHT = 46;
 
-class ResultSet extends React.PureComponent {
+export default class ResultSet extends React.PureComponent {
   constructor(props) {
     super(props);
     this.state = {
       searchText: '',
       showModal: false,
-      data: [],
+      data: null,
+      height: props.search ? props.height - RESULT_SET_CONTROLS_HEIGHT : props.height,
     };
+  }
+  componentDidMount() {
+    // only do this the first time the component is rendered/mounted
+    this.reRunQueryIfSessionTimeoutErrorOnMount();
   }
   componentWillReceiveProps(nextProps) {
     // when new results comes in, save them locally and clear in store
@@ -43,8 +50,12 @@ class ResultSet extends React.PureComponent {
       && nextProps.query.results.data.length > 0) {
       this.setState(
         { data: nextProps.query.results.data },
-        this.clearQueryResults(nextProps.query)
+        this.clearQueryResults(nextProps.query),
       );
+    }
+    if (nextProps.query.resultsKey
+      && nextProps.query.resultsKey !== this.props.query.resultsKey) {
+      this.fetchResults(nextProps.query);
     }
   }
   getControls() {
@@ -125,37 +136,22 @@ class ResultSet extends React.PureComponent {
   reFetchQueryResults(query) {
     this.props.actions.reFetchQueryResults(query);
   }
+  reRunQueryIfSessionTimeoutErrorOnMount() {
+    const { query } = this.props;
+    if (query.errorMessage && query.errorMessage.indexOf('session timed out') > 0) {
+      this.props.actions.runQuery(query, true);
+    }
+  }
   render() {
     const query = this.props.query;
-    const results = query.results;
-    let data;
-    if (this.props.cache && query.cached) {
-      data = this.state.data;
-    } else {
-      data = results ? results.data : [];
-    }
-
     let sql;
 
     if (this.props.showSql) {
       sql = <HighlightedSql sql={query.sql} />;
     }
-    if (['running', 'pending', 'fetching'].indexOf(query.state) > -1) {
-      let progressBar;
-      if (query.progress > 0 && query.state === 'running') {
-        progressBar = (
-          <ProgressBar
-            striped
-            now={query.progress}
-            label={`${query.progress}%`}
-          />);
-      }
-      return (
-        <div>
-          <img className="loading" alt="Loading..." src="/static/assets/images/loading.gif" />
-          {progressBar}
-        </div>
-      );
+
+    if (query.state === 'stopped') {
+      return <Alert bsStyle="warning">Query was stopped</Alert>;
     } else if (query.state === 'failed') {
       return <Alert bsStyle="danger">{query.errorMessage}</Alert>;
     } else if (query.state === 'success' && query.ctas) {
@@ -174,7 +170,14 @@ class ResultSet extends React.PureComponent {
           </Alert>
         </div>);
     } else if (query.state === 'success') {
-      if (results && data && data.length > 0) {
+      const results = query.results;
+      let data;
+      if (this.props.cache && query.cached) {
+        data = this.state.data;
+      } else if (results && results.data) {
+        data = results.data;
+      }
+      if (data && data.length > 0) {
         return (
           <div>
             <VisualizeModal
@@ -184,29 +187,16 @@ class ResultSet extends React.PureComponent {
             />
             {this.getControls.bind(this)()}
             {sql}
-            <div className="ResultSet">
-              <Table
-                data={data}
-                columns={results.columns.map((col) => col.name)}
-                sortable
-                className="table table-condensed table-bordered"
-                filterBy={this.state.searchText}
-                filterable={results.columns.map((c) => c.name)}
-                hideFilterInput
-              />
-            </div>
+            <FilterableTable
+              data={data}
+              orderedColumnKeys={results.columns.map(col => col.name)}
+              height={this.state.height}
+              filterText={this.state.searchText}
+            />
           </div>
         );
-      } else if (query.resultsKey) {
-        return (
-          <div>
-            <Alert bsStyle="warning">This query was run asynchronously &nbsp;
-              <Button bsSize="sm" onClick={this.fetchResults.bind(this, query)}>
-                Fetch results
-              </Button>
-            </Alert>
-          </div>
-        );
+      } else if (data && data.length === 0) {
+        return <Alert bsStyle="warning">The query returned no data</Alert>;
       }
     }
     if (query.cached) {
@@ -220,10 +210,37 @@ class ResultSet extends React.PureComponent {
         </Button>
       );
     }
-    return <Alert bsStyle="warning">The query returned no data</Alert>;
+    let progressBar;
+    let trackingUrl;
+    if (query.progress > 0 && query.state === 'running') {
+      progressBar = (
+        <ProgressBar
+          striped
+          now={query.progress}
+          label={`${query.progress}%`}
+        />);
+    }
+    if (query.trackingUrl) {
+      trackingUrl = (
+        <Button
+          bsSize="small"
+          onClick={() => { window.open(query.trackingUrl); }}
+        >
+            Track Job
+        </Button>
+      );
+    }
+    return (
+      <div>
+        <img className="loading" alt="Loading..." src="/static/assets/images/loading.gif" />
+        <QueryStateLabel query={query} />
+        {progressBar}
+        <div>
+          {trackingUrl}
+        </div>
+      </div>
+    );
   }
 }
 ResultSet.propTypes = propTypes;
 ResultSet.defaultProps = defaultProps;
-
-export default ResultSet;
